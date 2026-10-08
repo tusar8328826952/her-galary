@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
+<title>LUMEN — Volumetric Frame Archive</title>
+<meta name="description" content="A cinematic 3D photo gallery built with vanilla HTML, CSS and JavaScript." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body class="is-booting">
+
+<!-- ══ ATMOSPHERE (purely decorative, sits above the 3D scene) ══════════ -->
+<div class="atmos" aria-hidden="true">
+  <div class="atmos__keylight"></div>
+  <div class="atmos__rake"></div>
+  <div class="atmos__spotlight" id="spotlight"></div>
+  <div class="atmos__vignette"></div>
+  <div class="atmos__scan"></div>
+  <div class="atmos__grain"></div>
+</div>
+
+<!-- ══ CINEMASCOPE BARS — slide in when a frame is inspected ═════════ -->
+<div class="bars" aria-hidden="true"><i class="bars__bar bars__bar--t"></i><i class="bars__bar bars__bar--b"></i></div>
+
+<!-- ══ HUD — brand ═══════════════════════════════════════════════════ -->
+<header class="hud hud--brand">
+  <h1 class="brand">
+    <span class="brand__glyph" aria-hidden="true"></span>
+    <span class="brand__name">LUMEN</span>
+  </h1>
+  <p class="brand__sub">Volumetric&nbsp;Frame&nbsp;Archive</p>
+</header>
+
+<!-- ══ HUD — live read-out ════════════════════════════════════════════ -->
+<div class="hud hud--meta" aria-live="polite">
+  <p class="readout">
+    <span class="readout__now" id="readIndex">01</span>
+    <span class="readout__rule" aria-hidden="true"></span>
+    <span class="readout__all" id="readTotal">06</span>
+  </p>
+  <p class="readout__theme"><i class="dot" id="readDot"></i><span id="readTheme">ORIGIN</span></p>
+</div>
+
+<!-- ══ HUD — frame rail ═══════════════════════════════════════════════ -->
+<nav class="rail" id="rail" aria-label="Frame navigation"></nav>
+
+<!-- ══ THE 3D STAGE ═══════════════════════════════════════════════════ -->
+<main class="stage" id="stage">
+  <!-- camera: CSS-driven cinematic push-in used by the inspect transition -->
+  <div class="camera" id="camera">
+    <!-- world: JS-driven mouse parallax tilt -->
+    <div class="world" id="world">
+      <!-- ring: the preserve-3d container that holds every card -->
+      <div class="ring" id="ring"></div>
+    </div>
+  </div>
+
+  <!-- focus veil: blurs + dims the whole world while inspecting -->
+  <div class="veil" id="veil"></div>
+
+  <!-- inspector: the selected frame, pushed to centre-front -->
+  <section class="inspector" id="inspector" aria-hidden="true" role="dialog" aria-modal="false" aria-labelledby="inspTitle">
+    <div class="inspector__inner">
+      <figure class="inspector__frame" id="inspFrame">
+        <img class="inspector__img" id="inspImg" alt="" />
+        <i class="inspector__glow" aria-hidden="true"></i>
+        <i class="inspector__mat" aria-hidden="true"></i>
+      </figure>
+      <div class="inspector__copy">
+        <p class="inspector__kicker"><i class="dot"></i><span id="inspTheme">THEME</span><span class="inspector__num" id="inspNum">/ 01</span></p>
+        <h2 class="inspector__title" id="inspTitle">Title</h2>
+        <span class="inspector__rule" aria-hidden="true"></span>
+        <p class="inspector__desc" id="inspDesc">Description</p>
+        <p class="inspector__hint">press <kbd>Esc</kbd> or click anywhere to return</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- empty state -->
+  <div class="empty" id="empty" hidden>
+    <p class="empty__mark" aria-hidden="true">◌</p>
+    <h2 class="empty__title">Archive empty</h2>
+    <p class="empty__body">Every frame has been dissolved. Add a new one to restart the reel.</p>
+    <button class="btn btn--primary" type="button" data-add>Add first frame</button>
+  </div>
+</main>
+
+<!-- ══ HUD — controls ══════════════════════════════════════════════════ -->
+<footer class="hud hud--foot">
+  <ul class="hints" aria-hidden="true">
+    <li><kbd>Drag</kbd> rotate</li>
+    <li><kbd>Scroll</kbd> travel</li>
+    <li><kbd>&larr;</kbd><kbd>&rarr;</kbd> step</li>
+    <li><kbd>Click</kbd> inspect</li>
+    <li><kbd>Esc</kbd> return</li>
+  </ul>
+  <div class="actions">
+    <button class="btn btn--primary" type="button" id="btnAdd"><span aria-hidden="true">+</span> Add frame</button>
+    <button class="btn" type="button" id="btnImport" title="Add every photo from the local ./images folder">Import ./images</button>
+    <button class="btn btn--quiet" type="button" id="btnReset" title="Restore the default reel">Reset</button>
+  </div>
+</footer>
+
+<button class="closer" type="button" id="btnClose" aria-label="Close inspection view">
+  <span class="closer__x" aria-hidden="true"></span><span class="closer__label">Close</span>
+</button>
+
+<!-- ══ ADD-FRAME PANEL ════════════════════════════════════════════════ -->
+<div class="scrim" id="scrim" hidden></div>
+<section class="panel" id="panel" hidden aria-labelledby="panelTitle">
+  <header class="panel__head">
+    <h2 class="panel__title" id="panelTitle">New frame</h2>
+    <button class="panel__x" type="button" id="btnPanelClose" aria-label="Close panel"><span aria-hidden="true"></span></button>
+  </header>
+
+  <form class="panel__form" id="form" novalidate>
+    <section class="upload" aria-labelledby="uploadTitle">
+      <div class="upload__drop" id="uploadDropZone" role="group" aria-labelledby="uploadTitle" aria-describedby="uploadHint uploadStatus">
+        <p class="upload__title" id="uploadTitle">Add from this device</p>
+        <p class="upload__hint" id="uploadHint">Choose or drop JPG, PNG, GIF, WebP, AVIF, or BMP images.</p>
+        <button class="btn upload__button" type="button" id="btnChooseFiles" aria-controls="fileInput">Choose images</button>
+        <input class="upload__input" id="fileInput" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.bmp,image/jpeg,image/png,image/gif,image/webp,image/avif,image/bmp" multiple hidden />
+        <p class="upload__session">Local uploads stay in this browser tab; nothing is sent to a server.</p>
+        <p class="upload__status" id="uploadStatus" role="status" aria-live="polite" aria-atomic="true"></p>
+      </div>
+    </section>
+
+    <div class="field">
+      <label class="field__label" for="fUrl">Image URL</label>
+      <div class="field__preview" id="preview" data-state="empty">
+        <img id="fPreviewImg" alt="" />
+        <span class="field__previewText" id="previewText">no signal</span>
+      </div>
+      <input class="field__input" id="fUrl" name="url" type="url" inputmode="url" spellcheck="false"
+             placeholder="https://images.example.com/frame.jpg" autocomplete="off" />
+      <p class="field__err" id="errUrl" role="alert"></p>
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="fTitle">Title</label>
+      <input class="field__input" id="fTitle" name="title" type="text" placeholder="Neon Requiem" autocomplete="off" maxlength="64" />
+      <p class="field__err" id="errTitle" role="alert"></p>
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="fDesc">Description</label>
+      <textarea class="field__input field__input--area" id="fDesc" name="desc" rows="3" placeholder="A rain-soaked alley, sodium light bleeding into fog…" maxlength="280"></textarea>
+    </div>
+
+    <fieldset class="field field--themes">
+      <legend class="field__label">Accent</legend>
+      <div class="swatches" id="swatches"></div>
+    </fieldset>
+
+    <footer class="panel__foot">
+      <p class="panel__count" id="panelCount">6 frames in archive</p>
+      <button class="btn btn--primary btn--wide" type="submit">Inject frame</button>
+    </footer>
+  </form>
+</section>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- ══ BOOT CURTAIN ══════════════════════════════════════════════════ -->
+<div class="boot" id="boot" aria-hidden="true">
+  <span class="boot__mark"></span>
+  <p class="boot__word">LUMEN</p>
+  <p class="boot__sub">calibrating optics</p>
+</div>
+
+<script src="local-manifest.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
